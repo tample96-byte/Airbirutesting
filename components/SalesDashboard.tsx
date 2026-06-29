@@ -17,10 +17,10 @@ import {
   Wallet, 
   CreditCard, 
   TrendingUp, 
-  Clock, 
   ShieldCheck, 
   Activity 
 } from 'lucide-react';
+import { RealtimeClock } from './RealtimeClock';
 
 export function SalesDashboard() {
   // Local Database Queries
@@ -30,32 +30,11 @@ export function SalesDashboard() {
   // UI state
   const [isAdmin, setIsAdmin] = useState(false);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
-  const [currentTime, setCurrentTime] = useState('');
 
   // Firebase auth state
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [unsyncedCount, setUnsyncedCount] = useState(0);
-
-  // Real-time clock effect
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentTime(now.toLocaleDateString('id-ID', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      }) + ' - ' + now.toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      }));
-    };
-    updateTime();
-    const timer = setInterval(updateTime, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Monitor Auth State
   useEffect(() => {
@@ -312,10 +291,7 @@ export function SalesDashboard() {
           </div>
 
           {/* Real-time Clock Widget */}
-          <div className="flex items-center gap-2 text-slate-400 font-mono text-[11px] font-black bg-[#151B26] border border-[#202C3F] py-2 px-4 rounded-xl shadow-md shrink-0">
-            <Clock className="w-4 h-4 text-sky-400 shrink-0" />
-            <span>{currentTime || 'Memuat waktu...'}</span>
-          </div>
+          <RealtimeClock />
         </div>
 
         {/* Dashboard Financial Statistics Grid (CRITICAL: Visble for BOTH cashier and admin modes!) */}

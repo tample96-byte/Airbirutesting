@@ -50,24 +50,28 @@ export function SalesTable({ sales, onDeleteSale, onUpdateSale, isAdmin }: Sales
     }).replace('.', ':');
   };
 
-  // Filtering & searching logical flows
-  const sortedSales = [...sales].sort((a, b) => {
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
+  // Filtering & searching logical flows with useMemo
+  const sortedSales = React.useMemo(() => {
+    return [...sales].sort((a, b) => {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [sales]);
 
-  const filteredSales = sortedSales.filter(s => {
-    const matchesSearch = s.item.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          s.paymentMethod.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          s.amount.toString().includes(searchQuery);
-    
-    const matchesCategory = filterCategory === 'All' || 
-                            (filterCategory === 'Lain-lain' && s.item !== 'Refill' && s.item !== 'Galon Baru' && s.item !== 'Air Botol') ||
-                            s.item === filterCategory;
+  const filteredSales = React.useMemo(() => {
+    return sortedSales.filter(s => {
+      const matchesSearch = s.item.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            s.paymentMethod.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            s.amount.toString().includes(searchQuery);
+      
+      const matchesCategory = filterCategory === 'All' || 
+                              (filterCategory === 'Lain-lain' && s.item !== 'Refill' && s.item !== 'Galon Baru' && s.item !== 'Air Botol') ||
+                              s.item === filterCategory;
 
-    const matchesPayment = filterPayment === 'All' || s.paymentMethod === filterPayment;
+      const matchesPayment = filterPayment === 'All' || s.paymentMethod === filterPayment;
 
-    return matchesSearch && matchesCategory && matchesPayment;
-  });
+      return matchesSearch && matchesCategory && matchesPayment;
+    });
+  }, [sortedSales, searchQuery, filterCategory, filterPayment]);
 
   // Pagination logical calculations
   const totalPages = Math.ceil(filteredSales.length / itemsPerPage) || 1;

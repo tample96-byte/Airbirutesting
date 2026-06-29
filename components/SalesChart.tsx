@@ -21,8 +21,8 @@ interface SalesChartProps {
 }
 
 export function SalesChart({ sales }: SalesChartProps) {
-  // 1. Calculate Last 7 Days Revenue
-  const get7DaysData = () => {
+  // 1. Calculate Last 7 Days Revenue with useMemo
+  const chartData = React.useMemo(() => {
     const data = [];
     const today = new Date();
     for (let i = 6; i >= 0; i--) {
@@ -44,12 +44,10 @@ export function SalesChart({ sales }: SalesChartProps) {
       });
     }
     return data;
-  };
+  }, [sales]);
 
-  const chartData = get7DaysData();
-
-  // 2. Calculate Category Breakdown (All-time or last 30 days)
-  const getCategoryData = () => {
+  // 2. Calculate Category Breakdown with useMemo
+  const categoryData = React.useMemo(() => {
     const categories = ['Refill', 'Galon Baru', 'Air Botol', 'Lain-lain'];
     const data = categories.map((cat, idx) => {
       const catSales = sales.filter(s => {
@@ -67,9 +65,7 @@ export function SalesChart({ sales }: SalesChartProps) {
     }).filter(item => item.value > 0);
 
     return data;
-  };
-
-  const categoryData = getCategoryData();
+  }, [sales]);
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
