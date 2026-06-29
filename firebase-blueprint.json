@@ -2,39 +2,38 @@
   "entities": {
     "Sale": {
       "title": "Sale",
-      "description": "A transaction record for water sales",
+      "description": "Represents a transaction of water depot sale.",
       "type": "object",
       "properties": {
         "amount": {
           "type": "number",
-          "description": "The amount of the sale in Rp"
+          "description": "Total amount of the sale in IDR"
         },
         "item": {
           "type": "string",
-          "description": "The description of the item sold (e.g. Refill, Galon Baru)"
+          "description": "Name or type of water / service sold"
         },
         "createdAt": {
           "type": "string",
           "format": "date-time",
-          "description": "The creation timestamp in ISO 8601 format"
+          "description": "ISO 8601 string of the creation time"
         },
         "paymentMethod": {
           "type": "string",
-          "enum": ["Cash", "QRIS", "Transfer"],
-          "description": "The payment method used"
+          "description": "Payment method used (e.g. Cash, QRIS)"
         },
-        "ownerId": {
+        "userId": {
           "type": "string",
-          "description": "The user ID of the transaction owner"
+          "description": "The UID of the user who made the sale"
         }
       },
-      "required": ["amount", "item", "createdAt", "paymentMethod"]
+      "required": ["amount", "item", "createdAt", "paymentMethod", "userId"]
     }
   },
   "firestore": {
-    "sales/{saleId}": {
+    "/sales/{saleId}": {
       "schema": "Sale",
-      "description": "Sales collection indexed by sale unique ID"
+      "description": "The collections containing sales logs of the user."
     }
   }
 }

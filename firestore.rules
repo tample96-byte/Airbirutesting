@@ -1,62 +1,66 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Global Safety Net - default deny
+    // 1. Global safety net - Default deny catch-all
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Standard Helper functions
+    // --- Core Helper Functions ---
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isOwner(ownerId) {
-      return isSignedIn() && request.auth.uid == ownerId;
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
 
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Sales Collection rules
+    // --- Collection: Sales ---
     match /sales/{saleId} {
+      // allow list queries only if resource fields are explicitly filtered by the authenticated user's ID
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
       
-      // Helper to validate complete sale schema
-      function isValidSale(data) {
-        return data.keys().hasAll(['amount', 'item', 'createdAt', 'paymentMethod', 'ownerId'])
-          && data.keys().size() == 5
-          && data.amount is number
-          && data.amount >= 0
-          && data.item is string
-          && data.item.size() > 0
-          && data.item.size() <= 64
-          && data.createdAt is string
-          && data.createdAt.size() <= 64
-          && data.paymentMethod is string
-          && data.paymentMethod.size() > 0
-          && data.paymentMethod.size() <= 32
-          && data.ownerId is string
-          && data.ownerId == request.auth.uid;
-      }
-
-      // Read permissions
-      allow get: if isSignedIn() && isOwner(resource.data.ownerId);
-      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
-
-      // Write permissions
+      // allow fetching a single document only if the user owns it
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      // allow creating a sale with strict schema and format verification
       allow create: if isSignedIn() 
-        && isValidId(saleId) 
+        && isValidId(saleId)
         && isValidSale(request.resource.data);
-        
+
+      // allow updates only on non-identity fields with exact schema checks
       allow update: if isSignedIn()
-        && isOwner(resource.data.ownerId)
+        && isValidId(saleId)
         && isValidSale(request.resource.data)
-        && request.resource.data.ownerId == resource.data.ownerId; // Immutable ownerId
-        
-      allow delete: if isSignedIn() 
-        && isOwner(resource.data.ownerId);
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['amount', 'item', 'createdAt', 'paymentMethod']);
+
+      // allow deletions only by the owner
+      allow delete: if isSignedIn()
+        && isValidId(saleId)
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // Validation helper for Sale document payload
+    function isValidSale(data) {
+      return data.keys().hasAll(['amount', 'item', 'createdAt', 'paymentMethod', 'userId'])
+        && data.keys().size() == 5
+        && data.amount is number
+        && data.amount >= 0
+        && data.item is string
+        && data.item.size() > 0
+        && data.item.size() <= 200
+        && data.createdAt is string
+        && data.createdAt.size() <= 50
+        && data.paymentMethod is string
+        && data.paymentMethod.size() <= 50
+        && data.userId is string
+        && data.userId == request.auth.uid;
     }
   }
 }
