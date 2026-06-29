@@ -1,0 +1,6 @@
+{
+  "name": "Biru POS",
+  "description": "Sistem POS dan Laporan Laba Depot Air Minum Biru",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

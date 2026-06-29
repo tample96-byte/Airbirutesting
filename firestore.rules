@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net - default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Standard Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(ownerId) {
+      return isSignedIn() && request.auth.uid == ownerId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Sales Collection rules
+    match /sales/{saleId} {
+      
+      // Helper to validate complete sale schema
+      function isValidSale(data) {
+        return data.keys().hasAll(['amount', 'item', 'createdAt', 'paymentMethod', 'ownerId'])
+          && data.keys().size() == 5
+          && data.amount is number
+          && data.amount >= 0
+          && data.item is string
+          && data.item.size() > 0
+          && data.item.size() <= 64
+          && data.createdAt is string
+          && data.createdAt.size() <= 64
+          && data.paymentMethod is string
+          && data.paymentMethod.size() > 0
+          && data.paymentMethod.size() <= 32
+          && data.ownerId is string
+          && data.ownerId == request.auth.uid;
+      }
+
+      // Read permissions
+      allow get: if isSignedIn() && isOwner(resource.data.ownerId);
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+
+      // Write permissions
+      allow create: if isSignedIn() 
+        && isValidId(saleId) 
+        && isValidSale(request.resource.data);
+        
+      allow update: if isSignedIn()
+        && isOwner(resource.data.ownerId)
+        && isValidSale(request.resource.data)
+        && request.resource.data.ownerId == resource.data.ownerId; // Immutable ownerId
+        
+      allow delete: if isSignedIn() 
+        && isOwner(resource.data.ownerId);
+    }
+  }
+}

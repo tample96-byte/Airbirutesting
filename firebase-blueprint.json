@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "Sale": {
+      "title": "Sale",
+      "description": "A transaction record for water sales",
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "number",
+          "description": "The amount of the sale in Rp"
+        },
+        "item": {
+          "type": "string",
+          "description": "The description of the item sold (e.g. Refill, Galon Baru)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The creation timestamp in ISO 8601 format"
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["Cash", "QRIS", "Transfer"],
+          "description": "The payment method used"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "The user ID of the transaction owner"
+        }
+      },
+      "required": ["amount", "item", "createdAt", "paymentMethod"]
+    }
+  },
+  "firestore": {
+    "sales/{saleId}": {
+      "schema": "Sale",
+      "description": "Sales collection indexed by sale unique ID"
+    }
+  }
+}
