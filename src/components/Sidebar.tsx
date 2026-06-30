@@ -15,7 +15,10 @@ import {
   X, 
   User as UserIcon, 
   RefreshCw,
-  Settings
+  Settings,
+  Cloud,
+  CloudDownload,
+  CloudUpload
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -26,11 +29,15 @@ interface SidebarProps {
   authLoading: boolean;
   onLogin: () => void;
   onLogout: () => void;
-  unsyncedCount: number;
   onBackup: () => void;
   onDeleteAllLocal: () => void;
-  isFirebaseConfigured: boolean;
-  onOpenFirebaseModal: () => void;
+  
+  // Google Drive Cloud Sync Props
+  isDriveConnected: boolean;
+  onBackupToDrive: () => void;
+  onRestoreFromDrive: () => void;
+  isSyncingToDrive: boolean;
+  isRestoringFromDrive: boolean;
 }
 
 export function Sidebar({
@@ -41,11 +48,13 @@ export function Sidebar({
   authLoading,
   onLogin,
   onLogout,
-  unsyncedCount,
   onBackup,
   onDeleteAllLocal,
-  isFirebaseConfigured,
-  onOpenFirebaseModal,
+  isDriveConnected,
+  onBackupToDrive,
+  onRestoreFromDrive,
+  isSyncingToDrive,
+  isRestoringFromDrive,
 }: SidebarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -105,84 +114,106 @@ export function Sidebar({
           <div className="bg-[#0D111A] border border-[#202C3F] p-4.5 rounded-xl shadow-inner">
             <div className="flex items-center justify-between mb-2.5">
               <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">
-                Status Sinkronisasi
+                Status Cloud Google Drive
               </span>
-              <button
-                onClick={onOpenFirebaseModal}
-                className="p-1 hover:bg-[#1C2533] text-slate-400 hover:text-sky-400 rounded-lg transition cursor-pointer"
-                title="Konfigurasi Firebase / Auto Input"
-              >
-                <Settings className="w-3.5 h-3.5" />
-              </button>
             </div>
-            <div className="flex items-center gap-2.5">
-              {user && isFirebaseConfigured ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <div className="text-xs">
-                    <p className="font-extrabold text-emerald-400">Cloud Aktif</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      {unsyncedCount === 0 ? 'Semua terbackup' : `${unsyncedCount} transaksi pending`}
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <CloudOff className="w-4 h-4 text-amber-400 shrink-0" />
-                  <div className="text-xs">
-                    <p className="font-extrabold text-amber-400">Penyimpanan Lokal</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Data aman di browser</p>
-                  </div>
-                </>
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2.5">
+                {isDriveConnected ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-extrabold text-emerald-400">Google Drive Aktif</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Siap backup & restore</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <CloudOff className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-extrabold text-amber-400">Penyimpanan Lokal</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Data aman di browser</p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* If connected and is admin, show Backup and Restore buttons directly on the status card */}
+              {isDriveConnected && isAdmin && (
+                <div className="flex flex-col gap-2 mt-1 border-t border-[#1E2836] pt-2.5">
+                  <button
+                    onClick={onBackupToDrive}
+                    disabled={isSyncingToDrive}
+                    className="w-full py-1.5 px-2.5 bg-sky-950/40 hover:bg-sky-900/40 border border-sky-800/30 text-sky-400 disabled:opacity-50 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  >
+                    {isSyncingToDrive ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <CloudUpload className="w-3.5 h-3.5" />
+                    )}
+                    {isSyncingToDrive ? 'Mem-backup...' : 'Simpan Backup Drive'}
+                  </button>
+                  
+                  <button
+                    onClick={onRestoreFromDrive}
+                    disabled={isRestoringFromDrive}
+                    className="w-full py-1.5 px-2.5 bg-[#1C2533] hover:bg-[#202C3F] border border-[#202C3F] text-slate-300 disabled:opacity-50 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  >
+                    {isRestoringFromDrive ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    ) : (
+                      <CloudDownload className="w-3.5 h-3.5 text-amber-400" />
+                    )}
+                    {isRestoringFromDrive ? 'Memulihkan...' : 'Pulihkan Dari Drive'}
+                  </button>
+                </div>
               )}
             </div>
           </div>
 
           {/* User Account Section */}
-          {isAdmin && (
-            <div className="bg-[#0D111A] border border-[#202C3F] p-4.5 rounded-xl flex flex-col gap-3 shadow-inner">
-              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest block">
-                Akun Backup (Google)
-              </span>
-              {authLoading ? (
-                <div className="flex items-center justify-center p-2">
-                  <RefreshCw className="w-4 h-4 animate-spin text-sky-500" />
-                </div>
-              ) : user ? (
-                <div className="flex flex-col gap-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 font-bold text-sm uppercase shrink-0">
-                      {user.email ? user.email.slice(0, 2) : <UserIcon className="w-4 h-4" />}
-                    </div>
-                    <div className="overflow-hidden">
-                      <p className="text-xs font-bold text-slate-200 truncate">{user.displayName || 'Admin Air'}</p>
-                      <p className="text-[10px] text-slate-500 truncate font-mono mt-0.5">{user.email}</p>
-                    </div>
+          <div className="bg-[#0D111A] border border-[#202C3F] p-4.5 rounded-xl flex flex-col gap-3 shadow-inner">
+            <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest block">
+              Akun Staf Depot
+            </span>
+            {authLoading ? (
+              <div className="flex items-center justify-center p-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-sky-500" />
+              </div>
+            ) : user ? (
+              <div className="flex flex-col gap-3.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 font-bold text-sm uppercase shrink-0">
+                    {user.email ? user.email.slice(0, 2) : <UserIcon className="w-4 h-4" />}
                   </div>
-                  <button
-                    onClick={onLogout}
-                    className="w-full py-2 px-3 bg-[#1A2333] hover:bg-red-950/20 hover:text-red-400 border border-[#202C3F] hover:border-red-900/30 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    Keluar Akun
-                  </button>
+                  <div className="overflow-hidden">
+                    <p className="text-xs font-bold text-slate-200 truncate">{user.displayName || 'Staf Depot'}</p>
+                    <p className="text-[10px] text-slate-500 truncate font-mono mt-0.5">{user.email}</p>
+                  </div>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-2.5">
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Aktifkan cloud backup otomatis agar data Anda aman dari kehilangan cache browser.
-                  </p>
-                  <button
-                    onClick={onLogin}
-                    className="w-full py-2 px-3 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md shadow-sky-950/20"
-                  >
-                    <LogIn className="w-3.5 h-3.5" />
-                    Masuk Google
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+                <button
+                  onClick={onLogout}
+                  className="w-full py-2 px-3 bg-[#1A2333] hover:bg-red-950/20 hover:text-red-400 border border-[#202C3F] hover:border-red-900/30 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Keluar Akun
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2.5">
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Hubungkan ke Google Drive untuk menyimpan backup database aman di cloud Anda.
+                </p>
+                <button
+                  onClick={onLogin}
+                  className="w-full py-2 px-3 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md shadow-sky-950/20"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  Hubungkan Drive
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Action controls - Admin Only */}
@@ -289,78 +320,95 @@ export function Sidebar({
               )}
             </div>
 
-            {/* Auth Google Backup Section (Admin only) */}
-            {isAdmin && (
-              <div className="bg-[#151B26] border border-[#242F41] p-4.5 rounded-xl">
-                <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest block mb-2.5">
-                  User / Akun Backup Google
-                </span>
-                {user ? (
-                  <div className="flex flex-col gap-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 font-bold text-sm uppercase">
-                        {user.email ? user.email.slice(0, 2) : <UserIcon className="w-4 h-4" />}
-                      </div>
-                      <div className="overflow-hidden">
-                        <p className="text-xs font-bold text-slate-200 truncate">{user.displayName || 'Admin Air'}</p>
-                        <p className="text-[10px] text-slate-500 truncate font-mono mt-0.5">{user.email}</p>
-                      </div>
+            {/* Auth Google Backup Section */}
+            <div className="bg-[#151B26] border border-[#242F41] p-4.5 rounded-xl">
+              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest block mb-2.5">
+                Akun Staf Depot
+              </span>
+              {user ? (
+                <div className="flex flex-col gap-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 font-bold text-sm uppercase">
+                      {user.email ? user.email.slice(0, 2) : <UserIcon className="w-4 h-4" />}
                     </div>
-                    <button
-                      onClick={() => {
-                        onLogout();
-                        setIsMobileMenuOpen(false);
-                      }}
-                      className="w-full py-2 px-3 bg-[#1A2333] hover:bg-red-950/20 hover:text-red-400 border border-[#202C3F] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      Keluar Akun Google
-                    </button>
+                    <div className="overflow-hidden">
+                      <p className="text-xs font-bold text-slate-200 truncate">{user.displayName || 'Staf Depot'}</p>
+                      <p className="text-[10px] text-slate-500 truncate font-mono mt-0.5">{user.email}</p>
+                    </div>
                   </div>
-                ) : (
-                  <div className="flex flex-col gap-2.5">
-                    <p className="text-xs text-slate-400 leading-relaxed mb-1">
-                      Masuk dengan akun Google untuk sinkronisasi otomatis ke cloud.
-                    </p>
-                    <button
-                      onClick={() => {
-                        onLogin();
-                        setIsMobileMenuOpen(false);
-                      }}
-                      className="w-full py-2.5 px-3 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md"
-                    >
-                      <LogIn className="w-3.5 h-3.5" />
-                      Masuk Google
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+                  <button
+                    onClick={onLogout}
+                    className="w-full py-2 px-3 bg-[#1A2333] hover:bg-red-950/20 hover:text-red-400 border border-[#202C3F] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    Keluar Akun Google
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2.5">
+                  <p className="text-xs text-slate-400 leading-relaxed mb-1">
+                    Hubungkan ke Google Drive untuk menyimpan backup database aman di cloud Anda.
+                  </p>
+                  <button
+                    onClick={() => {
+                      onLogin();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full py-2.5 px-3 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    Hubungkan Drive
+                  </button>
+                </div>
+              )}
+            </div>
 
             <div className="bg-[#151B26] border border-[#242F41] p-4.5 rounded-xl flex flex-col gap-2.5">
               <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest block">
-                Ringkasan Database
+                Google Drive Sync (Mobile)
               </span>
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-400">Penyimpanan Cloud:</span>
-                <span className={user && isFirebaseConfigured ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
-                  {user && isFirebaseConfigured ? 'Aktif (Cloud)' : 'Nonaktif (Lokal)'}
+                <span className={isDriveConnected ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                  {isDriveConnected ? 'Aktif (Drive)' : 'Nonaktif (Lokal)'}
                 </span>
               </div>
-              <div className="flex justify-between items-center text-xs border-t border-[#202C3F] pt-2">
-                <span className="text-slate-400">Pending Sync:</span>
-                <span className="text-sky-400 font-mono font-extrabold">{unsyncedCount} transaksi</span>
-              </div>
-              <button
-                onClick={() => {
-                  onOpenFirebaseModal();
-                  setIsMobileMenuOpen(false);
-                }}
-                className="w-full mt-2 py-2 px-3 bg-[#1A2333] hover:bg-[#202C3F] text-slate-300 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-[#202C3F] transition cursor-pointer"
-              >
-                <Settings className="w-3.5 h-3.5 text-sky-400" />
-                Atur Koneksi Firebase
-              </button>
+              
+              {isDriveConnected && isAdmin && (
+                <div className="flex flex-col gap-2 mt-2 border-t border-[#242F41] pt-3">
+                  <button
+                    onClick={() => {
+                      onBackupToDrive();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    disabled={isSyncingToDrive}
+                    className="w-full py-2 px-3 bg-sky-950/40 border border-sky-800/30 text-sky-400 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isSyncingToDrive ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <CloudUpload className="w-3.5 h-3.5" />
+                    )}
+                    {isSyncingToDrive ? 'Mem-backup...' : 'Simpan Backup Drive'}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onRestoreFromDrive();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    disabled={isRestoringFromDrive}
+                    className="w-full py-2 px-3 bg-[#1C2533] border border-[#202C3F] text-slate-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isRestoringFromDrive ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    ) : (
+                      <CloudDownload className="w-3.5 h-3.5 text-amber-400" />
+                    )}
+                    {isRestoringFromDrive ? 'Memulihkan...' : 'Pulihkan Dari Drive'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

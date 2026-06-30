@@ -1,10 +1,16 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { db, Sale, formatRupiah, Preset } from '@/lib/db';
-import { db as firestoreDb, auth as firestoreAuth, isFirebaseConfigured } from '@/lib/firebase';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { collection, addDoc, doc, deleteDoc, updateDoc, query, where, onSnapshot } from 'firebase/firestore';
-import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, type User } from 'firebase/auth';
+import { type User } from 'firebase/auth';
+import { 
+  initDriveAuth, 
+  loginWithGoogleDrive, 
+  logoutGoogleDrive, 
+  uploadBackupToDrive, 
+  restoreBackupFromDrive,
+  getDriveAccessToken
+} from '@/lib/driveService';
 import { Sidebar } from './Sidebar';
 import { SaleForm } from './SaleForm';
 import { SalesChart } from './SalesChart';
@@ -12,7 +18,6 @@ import { SalesTable } from './SalesTable';
 import { AdminPinModal } from './admin/AdminPinModal';
 import { AdminPresetManager } from './admin/AdminPresetManager';
 import { AdminChangePin } from './admin/AdminChangePin';
-import { FirebaseConfigModal } from './admin/FirebaseConfigModal';
 import { 
   DollarSign, 
   Wallet, 
@@ -31,159 +36,124 @@ export function SalesDashboard() {
   // UI state
   const [isAdmin, setIsAdmin] = useState(false);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
-  const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState(false);
 
-  // Firebase auth state
+  // Google Drive Auth & Sync states
   const [user, setUser] = useState<User | null>(null);
+  const [driveToken, setDriveToken] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [unsyncedCount, setUnsyncedCount] = useState(0);
+  const [isSyncingToDrive, setIsSyncingToDrive] = useState(false);
+  const [isRestoringFromDrive, setIsRestoringFromDrive] = useState(false);
 
-  // Monitor Auth State
+  // Monitor Google Drive Auth State
   useEffect(() => {
-    if (!isFirebaseConfigured || !firestoreAuth) {
-      setAuthLoading(false);
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged(firestoreAuth, (currentUser) => {
-      setUser(currentUser);
-      setAuthLoading(false);
-    });
+    const unsubscribe = initDriveAuth(
+      (currentUser, token) => {
+        setUser(currentUser);
+        setDriveToken(token);
+        setAuthLoading(false);
+      },
+      () => {
+        setUser(null);
+        setDriveToken(null);
+        setAuthLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, []);
 
-  // Track unsynced count
+  // Debounced auto-backup to Google Drive when local data changes
   useEffect(() => {
-    if (sales) {
-      const unsynced = sales.filter((s) => !s.firestoreId);
-      setUnsyncedCount(unsynced.length);
-    }
-  }, [sales]);
-
-  // Sync Offline Sales to Firestore when online & logged in
-  useEffect(() => {
-    if (user && isFirebaseConfigured && firestoreDb && sales) {
-      const unsyncedSales = sales.filter((s) => !s.firestoreId);
-      if (unsyncedSales.length > 0) {
-        syncSalesToFirestore(unsyncedSales, user.uid);
-      }
-    }
-  }, [user, sales]);
-
-  const syncSalesToFirestore = async (unsynced: Sale[], uid: string) => {
-    try {
-      for (const sale of unsynced) {
-        const docRef = await addDoc(collection(firestoreDb, 'sales'), {
-          amount: sale.amount,
-          item: sale.item,
-          createdAt: sale.createdAt.toISOString(),
-          paymentMethod: sale.paymentMethod,
-          userId: uid,
-        });
-        
-        // Update local Dexie sale with firestoreId
-        await db.sales.update(sale.id!, { firestoreId: docRef.id });
-      }
-    } catch (e) {
-      console.error("Error syncing sales to Firestore:", e);
-    }
-  };
-
-  // Listen to Firestore changes in real-time
-  useEffect(() => {
-    if (!user || !isFirebaseConfigured || !firestoreDb) return;
-
-    const q = query(collection(firestoreDb, 'sales'), where('userId', '==', user.uid));
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      for (const change of snapshot.docChanges()) {
-        const data = change.doc.data();
-        const firestoreId = change.doc.id;
-
-        if (change.type === 'added') {
-          // Check if it already exists locally
-          const localExists = await db.sales.where('firestoreId').equals(firestoreId).first();
-          if (!localExists) {
-            // Also check by timestamp and properties to prevent duplicate recording from same session sync
-            const duplicateCheck = await db.sales
-              .where('createdAt')
-              .equals(new Date(data.createdAt))
-              .first();
-
-            if (!duplicateCheck) {
-              await db.sales.add({
-                amount: data.amount,
-                item: data.item,
-                createdAt: new Date(data.createdAt),
-                paymentMethod: data.paymentMethod,
-                firestoreId: firestoreId,
-              });
-            } else if (!duplicateCheck.firestoreId) {
-              // Update firestoreId for existing local record
-              await db.sales.update(duplicateCheck.id!, { firestoreId });
-            }
-          }
-        } else if (change.type === 'modified') {
-          const local = await db.sales.where('firestoreId').equals(firestoreId).first();
-          if (local) {
-            await db.sales.update(local.id!, {
-              amount: data.amount,
-              item: data.item,
-              createdAt: new Date(data.createdAt),
-              paymentMethod: data.paymentMethod,
-            });
-          }
-        } else if (change.type === 'removed') {
-          const local = await db.sales.where('firestoreId').equals(firestoreId).first();
-          if (local) {
-            await db.sales.delete(local.id!);
-          }
+    if (driveToken && sales && presets) {
+      const delayDebounceFn = setTimeout(async () => {
+        try {
+          await uploadBackupToDrive(driveToken);
+          console.log('Auto-backup to Google Drive succeeded.');
+        } catch (err) {
+          console.error('Auto-backup to Google Drive failed:', err);
         }
-      }
-    });
+      }, 5000); // 5-second debounce to prevent spamming Google Drive APIs during rapid cashier actions
 
-    return () => unsubscribe();
-  }, [user]);
-
-  // Auth Handlers
-  const handleLogin = async () => {
-    if (!isFirebaseConfigured || !firestoreAuth) {
-      alert("Firebase belum dikonfigurasi di lingkungan ini.");
-      return;
+      return () => clearTimeout(delayDebounceFn);
     }
+  }, [sales, presets, driveToken]);
+
+  // Auth Handlers for Google Drive
+  const handleLogin = async () => {
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(firestoreAuth, provider);
+      const result = await loginWithGoogleDrive();
+      setUser(result.user);
+      setDriveToken(result.accessToken);
+      alert("Sukses menghubungkan Google Drive! Cloud backup otomatis aktif.");
     } catch (err: any) {
-      console.error("Google sign in failed:", err);
-      alert("Gagal masuk dengan Google: " + err.message);
+      console.error("Login Drive failed:", err);
+      alert(err.message || "Gagal masuk dengan Google.");
     }
   };
 
   const handleLogout = async () => {
-    if (!firestoreAuth) return;
     try {
-      await signOut(firestoreAuth);
+      await logoutGoogleDrive();
       setUser(null);
+      setDriveToken(null);
     } catch (err) {
-      console.error("Sign out failed:", err);
+      console.error("Sign out Drive failed:", err);
+    }
+  };
+
+  // Google Drive Manual Cloud Operations
+  const handleBackupToDrive = async () => {
+    if (!driveToken) {
+      alert("Harap hubungkan akun Google Drive terlebih dahulu.");
+      return;
+    }
+    setIsSyncingToDrive(true);
+    try {
+      await uploadBackupToDrive(driveToken);
+      alert("Sukses! Database berhasil dibackup aman di Google Drive Anda.");
+    } catch (err: any) {
+      alert(err.message || "Gagal mem-backup ke Google Drive.");
+    } finally {
+      setIsSyncingToDrive(false);
+    }
+  };
+
+  const handleRestoreFromDrive = async () => {
+    if (!driveToken) {
+      alert("Harap hubungkan akun Google Drive terlebih dahulu.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "⚠️ PERINGATAN KERAS!\n\nApakah Anda yakin ingin memulihkan database dari Google Drive?\nSemua transaksi lokal saat ini di browser Anda akan DIHAPUS dan DIGANTIKAN sepenuhnya dengan data dari file backup Google Drive Anda.\n\nTindakan ini tidak dapat dibatalkan!"
+    );
+    
+    if (!confirmed) return;
+
+    setIsRestoringFromDrive(true);
+    try {
+      const result = await restoreBackupFromDrive(driveToken);
+      alert(
+        `Sukses! Database berhasil dipulihkan dari Google Drive.\n\n` +
+        `• ${result.salesCount} Transaksi dipulihkan\n` +
+        `• ${result.presetsCount} Tombol Preset dipulihkan`
+      );
+    } catch (err: any) {
+      alert(err.message || "Gagal memulihkan data dari Google Drive.");
+    } finally {
+      setIsRestoringFromDrive(false);
     }
   };
 
   // CRUD Table Handlers
-  const handleDeleteSale = async (id: number, firestoreId?: string) => {
+  const handleDeleteSale = async (id: number) => {
     if (!window.confirm('Apakah Anda yakin ingin menghapus transaksi ini?')) {
       return;
     }
 
     try {
-      // 1. Delete locally
+      // Delete locally (auto-backup hook will update Drive)
       await db.sales.delete(id);
-
-      // 2. Delete from firestore if synced
-      if (firestoreId && user && isFirebaseConfigured && firestoreDb) {
-        await deleteDoc(doc(firestoreDb, 'sales', firestoreId));
-      }
     } catch (err) {
       console.error('Failed to delete transaction:', err);
     }
@@ -191,23 +161,13 @@ export function SalesDashboard() {
 
   const handleUpdateSale = async (updatedSale: Sale) => {
     try {
-      // 1. Update locally
+      // Update locally (auto-backup hook will update Drive)
       await db.sales.update(updatedSale.id!, {
         item: updatedSale.item,
         amount: updatedSale.amount,
         paymentMethod: updatedSale.paymentMethod,
         createdAt: updatedSale.createdAt,
       });
-
-      // 2. Update Firestore if synced
-      if (updatedSale.firestoreId && user && isFirebaseConfigured && firestoreDb) {
-        await updateDoc(doc(firestoreDb, 'sales', updatedSale.firestoreId), {
-          item: updatedSale.item,
-          amount: updatedSale.amount,
-          paymentMethod: updatedSale.paymentMethod,
-          createdAt: updatedSale.createdAt.toISOString(),
-        });
-      }
     } catch (err) {
       console.error('Failed to update transaction:', err);
     }
@@ -267,11 +227,13 @@ export function SalesDashboard() {
         authLoading={authLoading}
         onLogin={handleLogin}
         onLogout={handleLogout}
-        unsyncedCount={unsyncedCount}
         onBackup={handleBackupExport}
         onDeleteAllLocal={handleDeleteAllLocal}
-        isFirebaseConfigured={isFirebaseConfigured}
-        onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
+        isDriveConnected={!!driveToken}
+        onBackupToDrive={handleBackupToDrive}
+        onRestoreFromDrive={handleRestoreFromDrive}
+        isSyncingToDrive={isSyncingToDrive}
+        isRestoringFromDrive={isRestoringFromDrive}
       />
 
       {/* Main Panel content */}
@@ -403,12 +365,6 @@ export function SalesDashboard() {
           setIsAdmin(true);
           setIsPinModalOpen(false);
         }}
-      />
-
-      {/* Firebase cloud configuration auto-input modal */}
-      <FirebaseConfigModal
-        isOpen={isFirebaseModalOpen}
-        onClose={() => setIsFirebaseModalOpen(false)}
       />
     </div>
   );
